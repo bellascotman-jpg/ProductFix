@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { normalizeStoreUrl } from '@/lib/audit/validation'
+import { startFirecrawlAudit } from '@/lib/audit/firecrawl'
 import { NextResponse } from 'next/server'
 
 export async function POST(request: Request) {
@@ -19,11 +20,21 @@ export async function POST(request: Request) {
   const { data: audit, error } = await supabase.from('audits').insert({ user_id: user.id, store_url: rawUrl.trim(), normalized_url: normalized.url, domain: normalized.domain, status: 'QUEUED', current_stage: 'QUEUED' }).select('id, status, current_stage').single()
   if (error || !audit) return NextResponse.json({ error: 'Could not create the audit. Please try again.' }, { status: 500 })
 
-  const { error: jobError } = await supabase.from('audit_jobs').insert({ audit_id: audit.id, status: 'QUEUED', attempt_count: 0, available_at: new Date().toISOString() })
-  if (jobError) {
+  const { data: job, error: jobError } = await supabase.from('audit_jobs').insert({ audit_id: audit.id, status: 'QUEUED', attempt_count: 0, available_at: new Date().toISOString() }).select('id').single()
+  if (jobError || !job) {
     await supabase.from('audits').delete().eq('id', audit.id).eq('user_id', user.id)
     return NextResponse.json({ error: 'Could not queue the audit. Please try again.' }, { status: 500 })
   }
 
-  return NextResponse.json({ audit }, { status: 201 })
+  try {
+    const providerJobId = await startFirecrawlAudit(normalized.url, audit.id)
+    await supabase.from('audit_jobs').update({ status: 'RUNNING', provider: 'firecrawl', provider_job_id: providerJobId }).eq('id', job.id)
+    await supabase.from('audits').update({ status: 'CRAWLING', current_stage: 'CRAWLING', started_at: new Date().toISOString() }).eq('id', audit.id).eq('user_id', user.id)
+    return NextResponse.json({ audit: { ...audit, status: 'CRAWLING', current_stage: 'CRAWLING' } }, { status: 201 })
+  } catch (startError) {
+    const message = startError instanceof Error ? startError.message : 'Unable to start website analysis.'
+    await supabase.from('audit_jobs').update({ status: 'FAILED', error_message: message, completed_at: new Date().toISOString() }).eq('id', job.id)
+    await supabase.from('audits').update({ status: 'CRAWL_FAILED', current_stage: 'CRAWLING', failed_at: new Date().toISOString(), error_code: 'CRAWL_START_FAILED', error_message: message }).eq('id', audit.id).eq('user_id', user.id)
+    return NextResponse.json({ error: 'We could not start the website analysis. Please try again.' }, { status: 502 })
+  }
 }
