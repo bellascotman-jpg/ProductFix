@@ -14,8 +14,20 @@ const stages = [
   ['COMPLETED', 'Audit complete'],
 ] as const
 
+type AuditStatus = 'DRAFT' | 'QUEUED' | 'CRAWLING' | 'ANALYZING' | 'GENERATING_FINDINGS' | 'SCORING' | 'GENERATING_REPORT' | 'COMPLETED' | 'CRAWL_FAILED' | 'ANALYSIS_FAILED' | 'AI_FAILED' | 'REPORT_FAILED' | 'CANCELLED'
+
+type Audit = {
+  id: string
+  domain: string
+  store_url: string
+  status: AuditStatus
+  current_stage: string
+  overall_score: number | null
+  error_message: string | null
+}
+
 export default function AuditStatusPage({ params }: { params: Promise<{ auditId: string }> }) {
-  const [audit, setAudit] = useState<any>(null)
+  const [audit, setAudit] = useState<Audit | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -25,8 +37,8 @@ export default function AuditStatusPage({ params }: { params: Promise<{ auditId:
       try {
         const id = (await params).auditId
         const response = await fetch(`/api/audits/${id}`, { cache: 'no-store' })
-        const data = await response.json()
-        if (!response.ok) throw new Error(data.error || 'Unable to load audit.')
+        const data: { audit?: Audit; error?: string } = await response.json()
+        if (!response.ok || !data.audit) throw new Error(data.error || 'Unable to load audit.')
         if (!active) return
         setAudit(data.audit)
         if (!['COMPLETED', 'CRAWL_FAILED', 'ANALYSIS_FAILED', 'AI_FAILED', 'REPORT_FAILED', 'CANCELLED'].includes(data.audit.status)) timer = setTimeout(load, 2500)
