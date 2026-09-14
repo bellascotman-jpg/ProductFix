@@ -1,5 +1,5 @@
 {
   "crons": [
-    { "path": "/api/cron/process-audits", "schedule": "* * * * *" }
+    { "path": "/api/cron/process-audits", "schedule": "0 3 * * *" }
   ]
 }
