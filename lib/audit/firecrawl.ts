@@ -18,7 +18,8 @@ export type FirecrawlWebhookEvent = {
 function getConfig() {
   const apiKey = process.env.FIRECRAWL_API_KEY
   const appUrl = process.env.NEXT_PUBLIC_APP_URL
-  if (!apiKey || !appUrl) throw new Error('Firecrawl integration is not configured.')
+  const webhookSecret = process.env.FIRECRAWL_WEBHOOK_SECRET
+  if (!apiKey || !appUrl || !webhookSecret) throw new Error('Firecrawl integration is not fully configured.')
   return { apiKey, appUrl: appUrl.replace(/\/$/, '') }
 }
 
