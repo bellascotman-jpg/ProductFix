@@ -33,7 +33,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ audit: { ...audit, status: 'CRAWLING', current_stage: 'CRAWLING' } }, { status: 201 })
   } catch (startError) {
     const message = startError instanceof Error ? startError.message : 'Unable to start website analysis.'
-    await supabase.from('audit_jobs').update({ status: 'FAILED', error_message: message, completed_at: new Date().toISOString() }).eq('id', job.id)
+    await supabase.from('audit_jobs').update({ status: 'FAILED', last_error: message, completed_at: new Date().toISOString() }).eq('id', job.id)
     await supabase.from('audits').update({ status: 'CRAWL_FAILED', current_stage: 'CRAWLING', failed_at: new Date().toISOString(), error_code: 'CRAWL_START_FAILED', error_message: message }).eq('id', audit.id).eq('user_id', user.id)
     return NextResponse.json({ error: 'We could not start the website analysis. Please try again.' }, { status: 502 })
   }
